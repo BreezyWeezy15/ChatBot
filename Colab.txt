@@ -1,0 +1,38 @@
+import json
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import StringTensorType
+
+# Load data
+with open('custom_dataset.json', 'r') as f:
+    data = json.load(f)
+
+questions = [item["input"] for item in data]
+answers = [item["output"] for item in data]
+
+# Encode answers
+le = LabelEncoder()
+y = le.fit_transform(answers)
+
+# Train model
+pipeline = Pipeline([
+    ("tfidf", TfidfVectorizer()),
+    ("clf", LogisticRegression(max_iter=1000))
+])
+pipeline.fit(questions, y)
+
+# Save label mapping
+label_mapping = {str(i): answer for i, answer in enumerate(le.classes_)}
+with open("label_mapping.json", "w") as f:
+    json.dump(label_mapping, f)
+
+# Export model to ONNX
+initial_type = [('input', StringTensorType([None]))]
+onnx_model = convert_sklearn(pipeline, initial_types=initial_type)
+with open("qa_model.onnx", "wb") as f:
+    f.write(onnx_model.SerializeToString())
+
+print("✅ Model and label mapping saved.")
