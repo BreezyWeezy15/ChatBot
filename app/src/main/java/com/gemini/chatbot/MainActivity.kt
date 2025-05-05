@@ -1,18 +1,15 @@
 package com.gemini.chatbot
 
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.StringWriter
+import java.util.*
+import ai.onnxruntime.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -36,10 +33,10 @@ class MainActivity : AppCompatActivity() {
 
         // Load model
         ortEnv = OrtEnvironment.getEnvironment()
-        val modelBytes = assets.open("qa_model.onnx").readBytes()
+        val modelBytes = assets.open("qa_model_meta.onnx").readBytes()
         ortSession = ortEnv.createSession(modelBytes)
 
-        labelMapping = loadLabelMapping()
+        labelMapping = loadLabelMappingFromModel()
 
         button.setOnClickListener {
             val question = editText.text.toString()
@@ -69,27 +66,40 @@ class MainActivity : AppCompatActivity() {
         return labelMapping[labelIndex] ?: "Unknown answer"
     }
 
-    private fun loadLabelMapping(): Map<String, String> {
-        val inputStream = assets.open("label_mapping.json")
-        val writer = StringWriter()
-        val buffer = CharArray(1024)
-        inputStream.use { input ->
-            val reader = BufferedReader(InputStreamReader(input, "UTF-8"))
-            var n = reader.read(buffer)
-            while (n != -1) {
-                writer.write(buffer, 0, n)
-                n = reader.read(buffer)
+    private fun loadLabelMappingFromModel(): Map<String, String> {
+        try {
+            // Get OnnxModelMetadata object
+            val onnxMetadata = ortSession.metadata
+
+            // Access custom metadata (a MutableMap<String, String>)
+            val customMetadata = onnxMetadata.customMetadata
+
+            // Convert to a regular Map<String, String>
+            val metadataMap = mutableMapOf<String, String>()
+            for ((key, value) in customMetadata) {
+                metadataMap[key] = value
             }
+
+            // Extract label mapping JSON string
+            val labelMappingJson = metadataMap["label_mapping"]
+                ?: throw Exception("Label mapping not found in ONNX model metadata.")
+
+            // Parse JSON string to Map
+            val obj = JSONObject(labelMappingJson)
+            val map = mutableMapOf<String, String>()
+            val keys = obj.keys()
+
+            while (keys.hasNext()) {
+                val key = keys.next()
+                map[key] = obj.getString(key)
+            }
+
+            Log.d("LabelMapping", "Loaded ${map.size} labels from model metadata.")
+            return map
+        } catch (e: Exception) {
+            Log.e("LabelMapping", "Failed to load label mapping", e)
+            return emptyMap()
         }
-        val jsonString = writer.toString()
-        val obj = JSONObject(jsonString)
-        val map = mutableMapOf<String, String>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            map[key] = obj.getString(key)
-        }
-        return map
     }
 }
 
