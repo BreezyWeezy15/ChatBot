@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
 
         // Load model
         ortEnv = OrtEnvironment.getEnvironment()
-        val modelBytes = assets.open("qa_model_meta.onnx").readBytes()
+        val modelBytes = assets.open("qa_model_with_metadata.onnx").readBytes()
         ortSession = ortEnv.createSession(modelBytes)
 
         labelMapping = loadLabelMappingFromModel()
